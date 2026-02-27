@@ -40,15 +40,9 @@ services:
     restart: unless-stopped
     user: "${PUID}:${PGID}"
     environment:
-      - TZ=${TZ:-Europe/Oslo}
-      - PORT=${PORT:-3004}
-      - TTS_API_KEY=${TTS_API_KEY:?TTS_API_KEY is required}
-      - HIP_VISIBLE_DEVICES=0
-      - HSA_OVERRIDE_GFX_VERSION=
-      - MAX_CONCURRENCY=${MAX_CONCURRENCY:-1}
-      - MAX_CHUNK_CHARS=${MAX_CHUNK_CHARS:-700}
-      - HF_REV_BASE=
-      - HF_REV_DESIGN=
+      - TZ=Europe/Oslo
+      - PORT=3004
+      - TTS_API_KEY=sk-your-api-key-here
     volumes:
       - /opt/appdata/qwen3-tts/config:/config
       - /opt/appdata/qwen3-tts/models:/models
@@ -78,17 +72,10 @@ docker compose up -d
 
 ### AMD GPU Troubleshooting
 
-If you encounter HIP/GPU errors with your AMD GPU, add this to the environment section:
+If you encounter HIP/GPU errors with your AMD GPU, you may need to set:
 
 ```yaml
 - HSA_OVERRIDE_GFX_VERSION=11.0.0
-```
-
-For model pinning, you can also set HuggingFace revisions:
-
-```yaml
-- HF_REV_BASE=<commit-sha>
-- HF_REV_DESIGN=<commit-sha>
 ```
 
 View logs with:
