@@ -42,6 +42,29 @@ Then start the container:
 docker compose up -d
 ```
 
+### AMD RX 7800 XT Troubleshooting
+
+If you encounter HIP/GPU errors with the AMD RX 7800 XT, add this to the environment section in docker-compose.yml:
+
+```yaml
+environment:
+  - HSA_OVERRIDE_GFX_VERSION=11.0.0
+```
+
+For model pinning, you can also set HuggingFace revisions:
+
+```yaml
+environment:
+  - HF_REV_BASE=<commit-sha>
+  - HF_REV_DESIGN=<commit-sha>
+```
+
+View logs with:
+
+```bash
+docker logs qwen3-tts
+```
+
 ## Testing with curl
 
 Base URL: `http://localhost:3004`
@@ -155,7 +178,7 @@ labels:
 | `TZ` | UTC | Timezone |
 | `TTS_API_KEY` | (required) | API key for authentication |
 | `HIP_VISIBLE_DEVICES` | 0 | GPU device ID |
-| `HSA_OVERRIDE_GFX_VERSION` | (empty) | Set to 11.0.0 if GPU not detected |
+| `HSA_OVERRIDE_GFX_VERSION` | (empty) | Set to 11.0.0 if AMD GPU not detected |
 | `MAX_CONCURRENCY` | 1 | Max concurrent synthesis requests |
 | `MAX_CHUNK_CHARS` | 700 | Max characters per text chunk |
 | `HF_REV_BASE` | (empty) | HuggingFace revision for Base model |
@@ -194,33 +217,6 @@ Supported output formats:
 Voices are stored at `/voices/{voice_id}/`:
 - `anchor.wav` - Canonical mono 16kHz PCM S16LE
 - `metadata.json` - Voice metadata
-
-## Troubleshooting
-
-### GPU Not Detected
-
-If you see HIP/GPU errors, set `HSA_OVERRIDE_GFX_VERSION` in docker-compose.yml:
-
-```yaml
-environment:
-  - HSA_OVERRIDE_GFX_VERSION=11.0.0
-```
-
-### Model Download Issues
-
-Set explicit HuggingFace revisions:
-
-```yaml
-environment:
-  - HF_REV_BASE=<commit-sha>
-  - HF_REV_DESIGN=<commit-sha>
-```
-
-### View Logs
-
-```bash
-docker logs qwen3-tts
-```
 
 ## Models
 
