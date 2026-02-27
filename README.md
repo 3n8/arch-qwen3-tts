@@ -7,13 +7,13 @@ Self-hosted Qwen3-TTS service intended as a practical drop-in replacement for El
 - **Best Audio Quality**: Uses Qwen3-TTS 12Hz 1.7B Base and VoiceDesign models
 - **Voice Persistence**: Anchor.wav pattern ensures consistent voice identity across restarts
 - **ElevenLabs-Compatible API**: Works with common ElevenLabs clients
-- **GPU-Accelerated**: AMD GPU with ROCm 6.4 support (RX 7000 series, MI300X, etc.)
+- **GPU-Accelerated**: AMD GPU with ROCm 6.4 support
 - **Media Preprocessing**: FFmpeg + VAD trimming for clean voice clones
 
 ## Requirements
 
-- Host: Arch Linux (or any Linux with ROCm support)
-- GPU: AMD GPU with ROCm 6.4 support (RX 7000 series, MI300X, etc.)
+- Host: Linux with ROCm 6.4 support
+- GPU: AMD GPU with ROCm 6.4 (RX 7000 series, MI300X, etc.)
 - Docker + Docker Compose
 
 ## First-Time Setup
@@ -29,11 +29,55 @@ Replace `1050:1050` with your actual PUID:PGID.
 
 ## Running
 
-Edit `docker-compose.yml` and set your API key in the environment section:
+Create a `docker-compose.yml` file:
 
 ```yaml
-environment:
-  - TTS_API_KEY=your-secret-api-key
+services:
+  qwen3-tts:
+    build: .
+    image: qwen3-tts:latest
+    container_name: qwen3-tts
+    restart: unless-stopped
+    user: "${PUID}:${PGID}"
+    environment:
+      - TZ=${TZ:-Europe/Oslo}
+      - PORT=${PORT:-3004}
+      - TTS_API_KEY=${TTS_API_KEY:?TTS_API_KEY is required}
+      - HIP_VISIBLE_DEVICES=0
+      - HSA_OVERRIDE_GFX_VERSION=
+      - MAX_CONCURRENCY=${MAX_CONCURRENCY:-1}
+      - MAX_CHUNK_CHARS=${MAX_CHUNK_CHARS:-700}
+      - HF_REV_BASE=
+      - HF_REV_DESIGN=
+    volumes:
+      - /opt/appdata/qwen3-tts/config:/config
+      - /opt/appdata/qwen3-tts/models:/models
+      - /opt/appdata/qwen3-tts/voices:/voices
+      - /opt/appdata/qwen3-tts/out:/out
+      - /opt/appdata/qwen3-tts/hf_cache:/root/.cache/huggingface
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    ipc: host
+    group_add:
+      - video
+      - render
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3004/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+```
+
+Create a `.env` file:
+
+```bash
+PUID=1050
+PGID=1050
+TZ=Europe/Oslo
+PORT=3004
+TTS_API_KEY=your-secret-api-key
 ```
 
 Then start the container:
@@ -44,19 +88,17 @@ docker compose up -d
 
 ### AMD GPU Troubleshooting
 
-If you encounter HIP/GPU errors with your AMD GPU, add this to the environment section in docker-compose.yml:
+If you encounter HIP/GPU errors with your AMD GPU, add this to the environment section:
 
 ```yaml
-environment:
-  - HSA_OVERRIDE_GFX_VERSION=11.0.0
+- HSA_OVERRIDE_GFX_VERSION=11.0.0
 ```
 
 For model pinning, you can also set HuggingFace revisions:
 
 ```yaml
-environment:
-  - HF_REV_BASE=<commit-sha>
-  - HF_REV_DESIGN=<commit-sha>
+- HF_REV_BASE=<commit-sha>
+- HF_REV_DESIGN=<commit-sha>
 ```
 
 View logs with:
@@ -153,21 +195,6 @@ curl -s -X POST "http://localhost:3004/v1/text-to-speech/voice_id_here/batch" \
 ```bash
 curl -s -H "x-tts-api-key: your-secret-api-key" \
   http://localhost:3004/v1/user/subscription
-```
-
-## Behind Traefik
-
-Use the `qwen3-tts-traefik` service in docker-compose.yml:
-
-```bash
-docker compose up -d qwen3-tts-traefik
-```
-
-Update the Traefik labels in docker-compose.yml with your domain:
-
-```yaml
-labels:
-  - "traefik.http.routers.qwen3-tts.rule=Host(`tts.yourdomain.com`)"
 ```
 
 ## Environment Variables
