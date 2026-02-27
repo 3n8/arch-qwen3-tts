@@ -21,42 +21,31 @@ Self-hosted Qwen3-TTS service intended as a practical drop-in replacement for El
 Create the required directories on the host with correct ownership:
 
 ```bash
-mkdir -p /opt/appdata/qwen3-tts/{config,models,voices,out,hf_cache}
-chown -R 1050:1050 /opt/appdata/qwen3-tts
+sudo mkdir -p /opt/appdata/qwen3-tts/{config,models,voices,out,hf_cache}
+sudo chown -R 1050:1050 /opt/appdata/qwen3-tts
 ```
 
 Replace `1050:1050` with your actual PUID:PGID.
 
-## Configuration
-
-Create a `.env` file:
-
-```bash
-TZ=Europe/Oslo
-PORT=3004
-PUID=1050
-PGID=1050
-TTS_API_KEY=your-secret-api-key
-MAX_CONCURRENCY=1
-MAX_CHUNK_CHARS=700
-```
-
 ## Running
 
-### Direct (with GPU)
+Edit `docker-compose.yml` and set your API key in the environment section:
+
+```yaml
+environment:
+  - TTS_API_KEY=your-secret-api-key
+```
+
+Then start the container:
 
 ```bash
 docker compose up -d
 ```
 
-### Behind Traefik
-
-Use the `qwen3-tts-traefik` service in docker-compose.yml and configure your domain.
-
-## API Usage Examples
+## Testing with curl
 
 Base URL: `http://localhost:3004`
-API Key: Set via `x-tts-api-key` header (or `xi-api-key`, `x-api-key` for ElevenLabs compat)
+API Key: Set via `x-tts-api-key` header
 
 ### Health Check
 
@@ -143,6 +132,21 @@ curl -s -H "x-tts-api-key: your-secret-api-key" \
   http://localhost:3004/v1/user/subscription
 ```
 
+## Behind Traefik
+
+Use the `qwen3-tts-traefik` service in docker-compose.yml:
+
+```bash
+docker compose up -d qwen3-tts-traefik
+```
+
+Update the Traefik labels in docker-compose.yml with your domain:
+
+```yaml
+labels:
+  - "traefik.http.routers.qwen3-tts.rule=Host(`tts.yourdomain.com`)"
+```
+
 ## Environment Variables
 
 | Variable | Default | Description |
@@ -159,7 +163,7 @@ curl -s -H "x-tts-api-key: your-secret-api-key" \
 
 ## Running as Non-Root User
 
-This container **MUST** run as a non-root user. Use the `user:` directive in docker-compose:
+This container **MUST** run as a non-root user. The `user:` directive is set in docker-compose:
 
 ```yaml
 user: "${PUID}:${PGID}"
@@ -167,24 +171,11 @@ user: "${PUID}:${PGID}"
 
 ### Limitations when running as non-root:
 
-1. **Pre-created directories**: Host directories MUST be created with correct ownership before first run
+1. **Pre-created directories**: Host directories MUST be created with correct ownership before first run (see First-Time Setup)
 2. **Port binding**: Cannot bind to privileged ports (<1024)
 3. **GPU access**: May need additional capabilities or group_add for GPU access
 
 If volumes aren't pre-owned, the app will log warnings but attempt to continue.
-
-## Traefik Configuration
-
-The `qwen3-tts-traefik` service includes Traefik labels:
-
-```yaml
-labels:
-  - "traefik.enable=true"
-  - "traefik.http.routers.qwen3-tts.rule=Host(`tts.yourdomain.com`)"
-  - "traefik.http.routers.qwen3-tts.entrypoints=websecure"
-  - "traefik.http.routers.qwen3-tts.tls.certresolver=letsencrypt"
-  - "traefik.http.services.qwen3-tts.loadbalancer.server.port=3004"
-```
 
 ## Output Formats
 
@@ -208,7 +199,8 @@ Voices are stored at `/voices/{voice_id}/`:
 
 ### GPU Not Detected
 
-If you see HIP/GPU errors, try setting:
+If you see HIP/GPU errors, set `HSA_OVERRIDE_GFX_VERSION` in docker-compose.yml:
+
 ```yaml
 environment:
   - HSA_OVERRIDE_GFX_VERSION=11.0.0
@@ -217,6 +209,7 @@ environment:
 ### Model Download Issues
 
 Set explicit HuggingFace revisions:
+
 ```yaml
 environment:
   - HF_REV_BASE=<commit-sha>
