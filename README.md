@@ -7,7 +7,7 @@ Self-hosted Qwen3-TTS service intended as a practical drop-in replacement for El
 - **Best Audio Quality**: Uses Qwen3-TTS 12Hz 1.7B Base and VoiceDesign models
 - **Voice Persistence**: Anchor.wav pattern ensures consistent voice identity across restarts
 - **ElevenLabs-Compatible API**: Works with common ElevenLabs clients
-- **GPU-Accelerated**: AMD RX 7800 XT (ROCm) support
+- **GPU-Accelerated**: AMD GPU with ROCm 6.4 support (RX 7000 series, MI300X, etc.)
 - **Media Preprocessing**: FFmpeg + VAD trimming for clean voice clones
 
 ## Requirements
