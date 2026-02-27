@@ -13,7 +13,7 @@ Self-hosted Qwen3-TTS service intended as a practical drop-in replacement for El
 ## Requirements
 
 - Host: Arch Linux (or any Linux with ROCm support)
-- GPU: AMD RX 7800 XT (ROCm 6.4+)
+- GPU: AMD GPU with ROCm 6.4 support (RX 7000 series, MI300X, etc.)
 - Docker + Docker Compose
 
 ## First-Time Setup
@@ -42,9 +42,9 @@ Then start the container:
 docker compose up -d
 ```
 
-### AMD RX 7800 XT Troubleshooting
+### AMD GPU Troubleshooting
 
-If you encounter HIP/GPU errors with the AMD RX 7800 XT, add this to the environment section in docker-compose.yml:
+If you encounter HIP/GPU errors with your AMD GPU, add this to the environment section in docker-compose.yml:
 
 ```yaml
 environment:
