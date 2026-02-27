@@ -70,16 +70,6 @@ services:
       start_period: 60s
 ```
 
-Create a `.env` file:
-
-```bash
-PUID=1050
-PGID=1050
-TZ=Europe/Oslo
-PORT=3004
-TTS_API_KEY=your-secret-api-key
-```
-
 Then start the container:
 
 ```bash
