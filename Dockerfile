@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         jq \
         tzdata \
         moreutils \
-        shadow \
+        shadow-utils \
         supervisor \
         dumb-init \
         ffmpeg \
