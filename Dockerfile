@@ -21,8 +21,8 @@ ENV HOME=/home/nobody \
     VOICES_DIR=/voices \
     MODELS_DIR=/models \
     OUT_DIR=/out \
-    HF_HOME=/cache/huggingface \
-    HF_CACHE_DIR=/cache/huggingface \
+    HF_HOME=/root/.cache/huggingface \
+    HF_CACHE_DIR=/root/.cache/huggingface \
     NUMBA_CACHE_DIR=/tmp/numba_cache
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
