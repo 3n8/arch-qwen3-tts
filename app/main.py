@@ -199,7 +199,7 @@ async def design_voice(
     _: str = Depends(verify_api_key),
 ):
     async with semaphore:
-        audio, design_info = await qwen_engine.design_voice(
+        (audio, sr), design_info = await qwen_engine.design_voice(
             name=request.name,
             prompt=request.prompt,
             sample_text=request.sample_text,
@@ -208,7 +208,7 @@ async def design_voice(
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         anchor_path = temp_path / "anchor.wav"
-        sf.write(str(anchor_path), audio, 16000)
+        sf.write(str(anchor_path), audio, sr)
 
         voice = voice_store.create_voice(
             name=request.name,

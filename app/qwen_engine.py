@@ -11,12 +11,11 @@ import subprocess
 
 import torch
 import numpy as np
-from transformers import AutoTokenizer, AutoModel
 import soundfile as sf
 
 
 MODELS_DIR = Path(os.getenv("MODELS_DIR", "/models"))
-HF_CACHE_DIR = Path(os.getenv("HF_CACHE_DIR", "/root/.cache/huggingface"))
+HF_CACHE_DIR = Path(os.getenv("HF_CACHE_DIR", "/cache/huggingface"))
 OUT_DIR = Path(os.getenv("OUT_DIR", "/out"))
 
 MODEL_BASE = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
@@ -28,7 +27,6 @@ MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "700"))
 class QwenEngine:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.tokenizer = None
         self.base_model = None
         self.design_model = None
         self.base_model_loaded = False
@@ -49,23 +47,20 @@ class QwenEngine:
                 return
 
             revision = self._resolve_revision("HF_REV_BASE", "main")
-            cache_path = self._get_model_cache_path(MODEL_BASE)
 
-            print(
-                f"Loading Qwen3-TTS Base model from {MODEL_BASE} (revision: {revision})"
-            )
+            print(f"Loading Qwen3-TTS Base model from {MODEL_BASE}")
 
             loop = asyncio.get_event_loop()
 
             def _load():
-                self.tokenizer = AutoTokenizer.from_pretrained(
-                    MODEL_BASE, revision=revision, cache_dir=str(HF_CACHE_DIR)
+                from qwen_tts import Qwen3TTSModel
+
+                self.base_model = Qwen3TTSModel.from_pretrained(
+                    MODEL_BASE,
+                    device_map=self.device,
+                    dtype=torch.bfloat16,
+                    cache_dir=str(HF_CACHE_DIR),
                 )
-                self.base_model = AutoModel.from_pretrained(
-                    MODEL_BASE, revision=revision, cache_dir=str(HF_CACHE_DIR)
-                )
-                self.base_model.to(self.device)
-                self.base_model.eval()
 
             await loop.run_in_executor(None, _load)
             self.base_model_loaded = True
@@ -76,20 +71,19 @@ class QwenEngine:
             if self.design_model_loaded:
                 return
 
-            revision = self._resolve_revision("HF_REV_DESIGN", "main")
-
-            print(
-                f"Loading Qwen3-TTS VoiceDesign model from {MODEL_DESIGN} (revision: {revision})"
-            )
+            print(f"Loading Qwen3-TTS VoiceDesign model from {MODEL_DESIGN}")
 
             loop = asyncio.get_event_loop()
 
             def _load():
-                self.design_model = AutoModel.from_pretrained(
-                    MODEL_DESIGN, revision=revision, cache_dir=str(HF_CACHE_DIR)
+                from qwen_tts import Qwen3TTSModel
+
+                self.design_model = Qwen3TTSModel.from_pretrained(
+                    MODEL_DESIGN,
+                    device_map=self.device,
+                    dtype=torch.bfloat16,
+                    cache_dir=str(HF_CACHE_DIR),
                 )
-                self.design_model.to(self.device)
-                self.design_model.eval()
 
             await loop.run_in_executor(None, _load)
             self.design_model_loaded = True
@@ -129,63 +123,38 @@ class QwenEngine:
 
         return chunks
 
-    def _generate_audio(
-        self, text: str, prompt_audio: Optional[Path] = None
-    ) -> np.ndarray:
-        if self.tokenizer is None or self.base_model is None:
+    def _generate_audio(self, text: str, prompt_audio: Optional[Path] = None) -> tuple:
+        if self.base_model is None:
             raise RuntimeError("Base model not loaded")
 
         if prompt_audio and prompt_audio.exists():
             prompt_wave, prompt_sr = sf.read(str(prompt_audio), dtype="float32")
             if len(prompt_wave.shape) > 1:
                 prompt_wave = prompt_wave.mean(axis=1)
-            prompt_sr = int(prompt_sr)
+            wavs, sr = self.base_model.generate(
+                text=text,
+                reference_audio=prompt_wave,
+                language="English",
+            )
         else:
-            prompt_wave = None
-            prompt_sr = None
+            wavs, sr = self.base_model.generate(
+                text=text,
+                language="English",
+            )
 
-        inputs = self.tokenizer(
-            text, return_tensors="pt", padding=True, truncation=True, max_length=2048
-        )
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        return wavs[0], sr
 
-        with torch.no_grad():
-            if prompt_wave is not None:
-                prompt_wave_tensor = (
-                    torch.from_numpy(prompt_wave).to(self.device).unsqueeze(0)
-                )
-                outputs = self.base_model.generate(
-                    **inputs,
-                    prompt_audio=prompt_wave_tensor,
-                    prompt_sample_rate=prompt_sr,
-                    max_length=2048,
-                )
-            else:
-                outputs = self.base_model.generate(**inputs, max_length=2048)
-
-        audio = outputs.audio[0].cpu().numpy()
-        return audio
-
-    def _generate_design(self, prompt: str, sample_text: str) -> np.ndarray:
+    def _generate_design(self, prompt: str, sample_text: str) -> tuple:
         if self.design_model is None:
             raise RuntimeError("Design model not loaded")
 
-        inputs = self.tokenizer(
-            sample_text,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=2048,
+        wavs, sr = self.design_model.generate_custom_voice(
+            text=sample_text,
+            language="English",
+            instruct=prompt,
         )
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
-        with torch.no_grad():
-            outputs = self.design_model.generate(
-                voice_prompt=prompt, **inputs, max_length=2048
-            )
-
-        audio = outputs.audio[0].cpu().numpy()
-        return audio
+        return wavs[0], sr
 
     async def synthesize(
         self,
@@ -214,21 +183,24 @@ class QwenEngine:
             def _gen():
                 return self._generate_audio(chunk, anchor_path)
 
-            audio = await loop.run_in_executor(None, _gen)
-            audio_chunks.append(audio)
+            audio, sr = await loop.run_in_executor(None, _gen)
+            audio_chunks.append((audio, sr))
 
         if len(audio_chunks) > 1:
-            silence = np.zeros(int(16000 * 0.3), dtype=np.float32)
+            silence = np.zeros(int(audio_chunks[0][1] * 0.3), dtype=np.float32)
             audio = np.concatenate(
-                [audio_chunks[0]] + [silence + chunk for chunk in audio_chunks[1:]]
+                [audio_chunks[0][0]]
+                + [silence + chunk[0] for chunk in audio_chunks[1:]]
             )
         else:
-            audio = audio_chunks[0]
+            audio = audio_chunks[0][0]
+
+        sr = audio_chunks[0][1]
 
         job_id = str(uuid.uuid4())
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         audio_path = OUT_DIR / f"{job_id}.wav"
-        sf.write(str(audio_path), audio, 16000)
+        sf.write(str(audio_path), audio, sr)
 
         metadata = {
             "job_id": job_id,
@@ -249,7 +221,7 @@ class QwenEngine:
 
     async def design_voice(
         self, name: str, prompt: str, sample_text: Optional[str] = None
-    ) -> tuple[np.ndarray, Dict[str, Any]]:
+    ) -> tuple:
         await self.load_design_model()
 
         if not sample_text:
@@ -265,9 +237,9 @@ class QwenEngine:
         def _generate():
             return self._generate_design(prompt, sample_text)
 
-        audio = await loop.run_in_executor(None, _generate)
+        audio, sr = await loop.run_in_executor(None, _generate)
 
-        return audio, {"prompt": prompt, "sample_text": sample_text, "name": name}
+        return (audio, sr), {"prompt": prompt, "sample_text": sample_text, "name": name}
 
 
 qwen_engine = QwenEngine()
