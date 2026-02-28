@@ -56,7 +56,7 @@ RUN chmod +x /tmp/install.sh && /tmp/install.sh; rm -f /tmp/install.sh; \
 RUN echo "export TARGETARCH=${TARGETARCH}" >> /etc/image-build-info
 
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
 COPY app /app
 RUN chmod -R 755 /app
