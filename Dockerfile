@@ -51,7 +51,7 @@ RUN chmod +x /tmp/install.sh && /tmp/install.sh; rm -f /tmp/install.sh; \
     chmod +x /usr/bin/init.sh && \
     chmod +x /usr/local/bin/system/scripts/docker/utils.sh && \
     mkdir -p /config /config/run /models /voices /out /root/.cache/huggingface && \
-    chmod -R 777 /config /models /voices /out
+    chmod -R 777 /config /models /voices /out /root/.cache
 
 RUN echo "export TARGETARCH=${TARGETARCH}" >> /etc/image-build-info
 
