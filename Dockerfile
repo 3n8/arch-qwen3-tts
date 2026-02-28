@@ -57,7 +57,8 @@ RUN chmod +x /tmp/install.sh && /tmp/install.sh; rm -f /tmp/install.sh; \
 RUN echo "export TARGETARCH=${TARGETARCH}" >> /etc/image-build-info
 
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --break-system-packages git+https://github.com/huggingface/transformers.git && \
+RUN pip uninstall -y transformers && \
+    pip install --no-cache-dir --break-system-packages git+https://github.com/huggingface/transformers.git && \
     pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
 COPY app /app
