@@ -14,3 +14,4 @@ python-dotenv==1.0.1
 webrtcvad==2.0.10
 tqdm==4.67.1
 qwen-tts
+numba
