@@ -21,7 +21,7 @@ OUT_DIR = Path(os.getenv("OUT_DIR", "/out"))
 MODEL_BASE = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 MODEL_DESIGN = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 
-MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "700"))
+MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "1500"))
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 
@@ -250,88 +250,16 @@ class QwenEngine:
             self.design_model_loaded = True
             print("Design model loaded successfully")
 
-    def _split_text_into_chunks(
-        self, text: str, anchor_path: Optional[Path] = None
-    ) -> List[str]:
+    def _split_text_into_chunks(self, text: str) -> List[str]:
         """
-        Split text into chunks using Whisper timestamps from anchor audio for natural pause detection.
-        Falls back to sentence-based splitting if anchor audio unavailable.
+        Split text into chunks for TTS generation.
+        Uses sentence-based splitting for natural flow.
         """
         text = text.strip()
         if not text:
             return []
 
-        # Try to use Whisper timestamps from anchor audio for natural chunking
-        if anchor_path and anchor_path.exists():
-            try:
-                result = transcribe_with_timestamps(
-                    anchor_path, language="en", timestamps_granularity="word"
-                )
-                words = result.get("words", [])
-
-                if words and len(words) > 5:
-                    # Find natural pause points (gaps between words)
-                    # A natural pause is typically > 0.3 seconds
-                    pause_threshold = 0.3
-
-                    pause_points = [0]  # Start with first word
-                    for i in range(1, len(words)):
-                        gap = words[i]["start"] - words[i - 1]["end"]
-                        if gap >= pause_threshold:
-                            pause_points.append(i)
-                    pause_points.append(len(words))  # End
-
-                    # Calculate target chars per chunk based on total text length
-                    total_words = len(words)
-                    avg_chars_per_word = (
-                        len(text) / total_words if total_words > 0 else 5
-                    )
-
-                    # Estimate char count per chunk based on pauses
-                    chunk_size = max(
-                        700, int(avg_chars_per_word * 15)
-                    )  # ~15 words per chunk default
-
-                    # Split at natural pause points, respecting chunk size
-                    word_chunks = []
-                    current_words = []
-                    current_chars = 0
-
-                    for i, word_data in enumerate(words):
-                        word = word_data["text"]
-                        current_words.append(word)
-                        current_chars += len(word) + 1  # +1 for space
-
-                        # Check if we should split here
-                        should_split = False
-
-                        # Split if gap is large enough AND we've accumulated enough chars
-                        if i in pause_points and current_chars >= chunk_size:
-                            should_split = True
-                        # Also split if we've exceeded max chunk size
-                        elif current_chars >= MAX_CHUNK_CHARS:
-                            should_split = True
-
-                        if should_split and current_words:
-                            word_chunks.append(" ".join(current_words))
-                            current_words = []
-                            current_chars = 0
-
-                    # Add remaining words
-                    if current_words:
-                        word_chunks.append(" ".join(current_words))
-
-                    if word_chunks:
-                        print(
-                            f"Whisper chunking: split into {len(word_chunks)} chunks using natural pauses"
-                        )
-                        return [c.strip() for c in word_chunks if c.strip()]
-            except Exception as e:
-                print(
-                    f"Whisper chunking failed: {e}, falling back to sentence splitting"
-                )
-
-        # Fallback: sentence-based splitting
+        # Split on sentence endings
         sentences = re.split(r"(?<=[.!?])\s+", text)
 
         chunks = []
@@ -495,7 +423,7 @@ class QwenEngine:
 
             voice_prompt = await loop.run_in_executor(None, build_prompt)
 
-        chunks = self._split_text_into_chunks(text, anchor_path)
+        chunks = self._split_text_into_chunks(text)
 
         if not chunks:
             raise ValueError("No text to synthesize")
