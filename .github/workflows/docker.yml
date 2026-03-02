@@ -22,7 +22,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
         run: |
-          docker build -t ghcr.io/3n8/qwen3-tts:latest .
-          docker push ghcr.io/3n8/qwen3-tts:latest
+          docker build --push -t ghcr.io/3n8/qwen3-tts:latest .
       - name: Cleanup
         run: docker rmi ghcr.io/3n8/qwen3-tts:latest || true
