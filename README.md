@@ -101,6 +101,50 @@ View logs with:
 docker logs qwen3-tts
 ```
 
+## Quick Guide (One Command Voice Cloning)
+
+Clone a voice from a YouTube video and generate speech in a single command.
+
+### Clone Voice from YouTube
+
+```bash
+curl -s -X POST "http://localhost:3004/v1/voices/clone" \
+  -H "x-tts-api-key: YOUR_API_KEY" \
+  -F "youtube_url=YOUTUBE_URL" \
+  -F "name=voice_name"
+```
+
+**Parameters:**
+- `youtube_url` (required): YouTube video URL
+- `name` (optional): Name for the voice (default: "cloned_voice")
+- `text` (optional): Custom text for TTS. If not provided, uses subtitle text from YouTube
+
+**What it does:**
+1. Downloads first 60 seconds of audio from YouTube
+2. Downloads subtitles from YouTube
+3. Creates a voice clone from the audio
+4. Generates TTS using the subtitle text (or custom text if provided)
+5. Saves to `/out/voice_name_qwen3_v1.mp3`
+
+**Example:**
+```bash
+curl -s -X POST "http://localhost:3004/v1/voices/clone" \
+  -H "x-tts-api-key: VJcCJrs46L7bdzKrSgsbYlrgZ" \
+  -F "youtube_url=https://www.youtube.com/watch?v=EXAMPLE_VIDEO_ID" \
+  -F "name=my_new_voice"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "voice_id": "abc123-def456...",
+  "voice_name": "my_new_voice",
+  "file": "/out/my_new_voice_qwen3_v1.mp3",
+  "text_used": "Hello world this is a test..."
+}
+```
+
 ## Testing with curl
 
 Base URL: `http://localhost:3004`
@@ -184,6 +228,43 @@ curl -s -X POST "http://localhost:3004/v1/text-to-speech/voice_id_here/batch" \
   -o batch_output.zip
 ```
 
+### Speech-to-Text Transcription
+
+Transcribe audio with word-level timestamps and optional speaker diarization.
+
+```bash
+curl -s -X POST "http://localhost:3004/v1/speech-to-text" \
+  -H "x-tts-api-key: your-secret-api-key" \
+  -F "file=@/path/to/audio.wav" \
+  -F "timestamps_granularity=word" \
+  -F "diarize=false"
+```
+
+**Parameters:**
+- `file` (required): Audio file to transcribe
+- `language_code` (optional): ISO language code (e.g., "en"). Auto-detected if not provided
+- `timestamps_granularity` (optional): "word" (default) or "character"
+- `diarize` (optional): true/false - Add speaker labels to each word
+
+**Response:**
+```json
+{
+  "text": "Transcribed text here...",
+  "language_code": "en",
+  "language_probability": 0.99,
+  "words": [
+    {
+      "text": "Hello",
+      "start": 0.0,
+      "end": 0.5,
+      "type": "word",
+      "logprob": -0.5,
+      "speaker": "SPEAKER_00"  // only when diarize=true
+    }
+  ]
+}
+```
+
 ### Get Subscription (ElevenLabs Compat)
 
 ```bash
@@ -262,7 +343,7 @@ The system now uses **ICL (In-Context Learning) mode** which:
 
 Without ICL, voices often speak too fast compared to the original.
 
-### Quick Start (For Me)
+### Full Guide
 
 ```bash
 # Download audio from YouTube
@@ -300,7 +381,7 @@ yt-dlp -x --audio-format wav --download-sections "*0-60" -o /tmp/{voice_name}.wa
 
 Example:
 ```bash
-yt-dlp -x --audio-format wav --download-sections "*0-60" -o /tmp/stuffie.wav https://www.youtube.com/watch?v=DunosrOLIDI
+yt-dlp -x --audio-format wav --download-sections "*0-60" -o /tmp/voice_name.wav YOUTUBE_URL
 ```
 
 #### Step 2: Download Subtitles

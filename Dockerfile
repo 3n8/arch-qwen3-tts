@@ -43,6 +43,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libmagick++-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install yt-dlp for YouTube downloads
+RUN pip install --no-cache-dir --break-system-packages yt-dlp
+
 RUN useradd -m -s /bin/bash nobody || true
 
 COPY build/common/root/install.sh /tmp/install.sh

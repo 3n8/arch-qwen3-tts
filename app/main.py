@@ -14,7 +14,7 @@ import soundfile as sf
 
 from app.auth import verify_api_key
 from app.voice_store import voice_store
-from app.qwen_engine import qwen_engine, transcribe_with_timestamps
+from app.qwen_engine import qwen_engine, transcribe_with_timestamps, transcribe_audio
 from app.preprocess import preprocess_audio, download_file
 from app.audio_formats import encode_audio, get_content_type
 
@@ -297,6 +297,193 @@ async def speech_to_text(
         )
 
     return result
+
+
+@app.post("/v1/voices/clone")
+async def clone_voice_from_youtube(
+    youtube_url: str = Form(...),
+    name: str = Form("cloned_voice"),
+    text: Optional[str] = Form(None),
+    _: str = Depends(verify_api_key),
+):
+    """
+    Clone a voice from a YouTube video in a single request.
+
+    This endpoint:
+    1. Downloads audio (first 60s) from YouTube
+    2. Downloads subtitles from YouTube
+    3. Extracts text from subtitles
+    4. Creates a voice from the audio
+    5. Generates TTS from the subtitle text (or custom text)
+    6. Saves to /out/{name}.mp3
+
+    Returns:
+        JSON with success status, file path, voice_id, and transcript
+    """
+    import subprocess
+    import re
+
+    safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+    temp_prefix = f"/tmp/{safe_name}"
+
+    try:
+        # Step 1: Download audio (first 60 seconds)
+        print(f"[clone] Downloading audio from {youtube_url}")
+        result = subprocess.run(
+            [
+                "yt-dlp",
+                "-x",
+                "--audio-format",
+                "wav",
+                "--download-sections",
+                "*0-60",
+                "-o",
+                f"{temp_prefix}.wav",
+                youtube_url,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+
+        if result.returncode != 0:
+            return {"error": "Failed to download audio", "details": result.stderr}
+
+        # Step 2: Download subtitles
+        print(f"[clone] Downloading subtitles from {youtube_url}")
+        result = subprocess.run(
+            [
+                "yt-dlp",
+                "--write-auto-subs",
+                "--sub-lang",
+                "en",
+                "--convert-subs",
+                "srt",
+                "-o",
+                temp_prefix,
+                youtube_url,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+
+        # Step 3: Prepare audio for voice creation
+        print(f"[clone] Preparing audio")
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                f"{temp_prefix}.wav",
+                "-t",
+                "60",
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                f"{temp_prefix}_60s.wav",
+            ],
+            capture_output=True,
+            timeout=60,
+        )
+
+        audio_path = Path(f"{temp_prefix}_60s.wav")
+        if not audio_path.exists():
+            return {"error": "Failed to prepare audio file"}
+
+        # Step 4: Create voice
+        print(f"[clone] Creating voice '{name}'")
+        voice = voice_store.create_voice(
+            name=name,
+            anchor_wav_path=audio_path,
+            labels={},
+            category="cloned",
+            method="clone",
+        )
+        voice_id = voice["voice_id"]
+
+        # Step 5: Extract text from subtitles or use provided text
+        if text:
+            tts_text = text
+        else:
+            # Try to extract from subtitles
+            srt_path = Path(f"{temp_prefix}.en.srt")
+            if srt_path.exists():
+                tts_text = extract_text_from_srt(srt_path)
+            else:
+                # Fallback: transcribe audio
+                print(f"[clone] No subtitles found, using Whisper transcription")
+                tts_text = transcribe_audio(audio_path)
+
+        if not tts_text:
+            return {
+                "error": "No text available for TTS. Provide 'text' parameter or ensure YouTube has subtitles."
+            }
+
+        # Step 6: Generate TTS
+        print(f"[clone] Generating TTS")
+        audio_path_out, _ = await qwen_engine.synthesize(
+            text=tts_text,
+            voice_id=voice_id,
+            voice_store=voice_store,
+            voice_settings={},
+            output_format="mp3_44100_128",
+        )
+
+        # Move to output
+        output_path = Path(f"/out/{safe_name}_qwen3_v1.mp3")
+        audio_path_out.rename(output_path)
+
+        return {
+            "success": True,
+            "voice_id": voice_id,
+            "voice_name": name,
+            "file": str(output_path),
+            "text_used": tts_text[:500] + "..." if len(tts_text) > 500 else tts_text,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def extract_text_from_srt(srt_path: Path) -> str:
+    """Extract text from SRT subtitle file within first 60 seconds."""
+    import re
+
+    with open(srt_path, "r") as f:
+        content = f.read()
+
+    texts = []
+    for block in content.split("\n\n"):
+        lines = block.strip().split("\n")
+        if len(lines) >= 3:
+            timecode = lines[1]
+            match = re.match(
+                r"(\d+):(\d+):(\d+),(\d+)", timecode.split("-->")[0].strip()
+            )
+            if match:
+                hours, mins, secs, ms = (
+                    int(match.group(1)),
+                    int(match.group(2)),
+                    int(match.group(3)),
+                    int(match.group(4)),
+                )
+                total_secs = hours * 3600 + mins * 60 + secs + ms / 1000
+                if total_secs <= 60:
+                    text = " ".join(lines[2:]).strip()
+                    if text:
+                        texts.append(text)
+
+    # Deduplicate
+    seen = set()
+    unique_texts = []
+    for t in texts:
+        if t not in seen:
+            seen.add(t)
+            unique_texts.append(t)
+
+    return " ".join(unique_texts)
 
 
 @app.get("/v1/user/subscription")
