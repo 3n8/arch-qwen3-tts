@@ -66,6 +66,17 @@ async def get_voice(voice_id: str, _: str = Depends(verify_api_key)):
     return voice
 
 
+@app.delete("/v1/voices/{voice_id}")
+async def delete_voice(voice_id: str, _: str = Depends(verify_api_key)):
+    """Delete a voice by ID.
+    
+    Returns:
+        JSON response with voice_id, name and deletion status
+    """
+    result = voice_store.delete_voice(voice_id)
+    return result
+
+
 @app.post("/v1/text-to-speech/{voice_id}")
 async def text_to_speech(
     voice_id: str,

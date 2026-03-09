@@ -158,6 +158,40 @@ class VoiceStore:
             )
 
         return anchor_path
+        
+    def delete_voice(self, voice_id: str) -> Dict[str, Any]:
+        """Delete a voice from the store.
+        
+        Args:
+            voice_id: ID of the voice to delete
+            
+        Returns:
+            Dictionary with voice details that was deleted
+            
+        Raises:
+            HTTPException: If voice not found
+        """
+        # Get voice details before deletion for confirmation
+        voice = self.get_voice(voice_id)
+        
+        # Get voice directory
+        voice_dir = self._get_voice_path(voice_id)
+        
+        # Check if it exists
+        if not voice_dir.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Voice {voice_id} not found",
+            )
+            
+        # Delete the entire directory
+        shutil.rmtree(voice_dir)
+        
+        return {
+            "voice_id": voice_id,
+            "name": voice["name"],
+            "deleted": True,
+        }
 
 
 voice_store = VoiceStore()
