@@ -96,7 +96,7 @@ class VoiceStore:
         source: Optional[str] = None,
         ref_text: Optional[str] = None,
     ) -> Dict[str, Any]:
-        voice_id = str(uuid.uuid4())
+        voice_id = str(uuid.uuid4()).replace("-", "")
         voice_dir = self.voices_dir / voice_id
         voice_dir.mkdir(parents=True, exist_ok=True)
 
